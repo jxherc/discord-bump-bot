@@ -45,19 +45,6 @@ async def bump_loop():
     await client.wait_until_ready()
     logger.info("Logged in as %s", client.user)
 
-    now = datetime.now(EST)
-    target = now.replace(hour=3, minute=0, second=0, microsecond=0)
-    if now >= target:
-        target += timedelta(days=1)
-
-    delay = (target - now).total_seconds()
-    logger.info(
-        "First bump scheduled at %s (~%.1fh from now)",
-        target.strftime("%Y-%m-%d %H:%M:%S EST"),
-        delay / 3600,
-    )
-    await asyncio.sleep(delay)
-
     while not client.is_closed():
         try:
             await do_bump()
