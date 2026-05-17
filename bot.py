@@ -5,6 +5,7 @@ import random
 from datetime import datetime, timedelta, timezone
 
 import discord
+from discord.http import Route
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,14 +30,38 @@ async def do_bump():
 
     guild = channel.guild
 
-    commands = await guild.fetch_commands(application_id=DISBOARD_ID)
-    bump_cmd = next((c for c in commands if c.name == "bump"), None)
+    # Search for Disboard's /bump command in this guild
+    data = await client.http.request(
+        Route("GET", "/guilds/{guild_id}/application-commands/search", guild_id=guild.id),
+        params={"type": 1, "query": "bump", "limit": 1, "application_id": DISBOARD_ID},
+    )
 
-    if bump_cmd is None:
+    cmds = data.get("application_commands", [])
+    bump = next((c for c in cmds if c["name"] == "bump"), None)
+
+    if not bump:
         logger.error("Could not find /bump command — is Disboard in this server?")
         return False
 
-    await bump_cmd.click(channel)
+    nonce = str(random.randint(100000000000000000, 999999999999999999))
+    payload = {
+        "type": 2,
+        "application_id": str(DISBOARD_ID),
+        "guild_id": str(guild.id),
+        "channel_id": str(channel.id),
+        "session_id": client.ws.session_id,
+        "nonce": nonce,
+        "data": {
+            "version": bump["version"],
+            "id": bump["id"],
+            "name": "bump",
+            "type": 1,
+            "options": [],
+            "attachments": [],
+        },
+    }
+
+    await client.http.request(Route("POST", "/interactions"), json=payload)
     logger.info("Bumped at %s", datetime.now(EST).strftime("%Y-%m-%d %H:%M:%S EST"))
     return True
 
