@@ -32,6 +32,12 @@ async def do_bump():
     guild = channel.guild
     logger.info("Channel: %s | Guild: %s (ID: %s)", channel, guild, getattr(guild, "id", None))
 
+    # Log available command-related attributes on Guild and HTTPClient
+    cmd_attrs = [a for a in dir(guild) if "command" in a.lower() or "application" in a.lower()]
+    http_attrs = [a for a in dir(client.http) if "command" in a.lower() or "application" in a.lower()]
+    logger.info("Guild command attrs: %s", cmd_attrs)
+    logger.info("HTTP command attrs: %s", http_attrs)
+
     # Use discord.py-self's HTTP client (has X-Super-Properties and all required headers)
     data = await client.http.request(
         Route("GET", "/channels/{channel_id}/application-commands/search", channel_id=channel.id),
