@@ -4,8 +4,8 @@ import os
 import random
 from datetime import datetime, timedelta, timezone
 
+import aiohttp
 import discord
-from discord.http import Route
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,40 +30,51 @@ async def do_bump():
 
     guild = channel.guild
 
-    # Search for Disboard's /bump command in this guild
-    data = await client.http.request(
-        Route("GET", "/guilds/{guild_id}/application-commands/search", guild_id=guild.id),
-        params={"type": 1, "query": "bump", "limit": 1, "application_id": DISBOARD_ID},
-    )
-
-    cmds = data.get("application_commands", [])
-    bump = next((c for c in cmds if c["name"] == "bump"), None)
-
-    if not bump:
-        logger.error("Could not find /bump command — is Disboard in this server?")
-        return False
-
-    nonce = str(random.randint(100000000000000000, 999999999999999999))
-    payload = {
-        "type": 2,
-        "application_id": str(DISBOARD_ID),
-        "guild_id": str(guild.id),
-        "channel_id": str(channel.id),
-        "session_id": client.ws.session_id,
-        "nonce": nonce,
-        "data": {
-            "version": bump["version"],
-            "id": bump["id"],
-            "name": "bump",
-            "type": 1,
-            "options": [],
-            "attachments": [],
-        },
+    headers = {
+        "Authorization": TOKEN,
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     }
 
-    await client.http.request(Route("POST", "/interactions"), json=payload)
-    logger.info("Bumped at %s", datetime.now(EST).strftime("%Y-%m-%d %H:%M:%S EST"))
-    return True
+    async with aiohttp.ClientSession(headers=headers) as session:
+        # Find Disboard's /bump command in this guild
+        async with session.get(
+            f"https://discord.com/api/v9/guilds/{guild.id}/application-commands/search",
+            params={"type": 1, "query": "bump", "application_id": str(DISBOARD_ID)},
+        ) as resp:
+            data = await resp.json()
+
+        bump = next((c for c in data.get("application_commands", []) if c["name"] == "bump"), None)
+
+        if not bump:
+            logger.error("Could not find /bump command — is Disboard in this server?")
+            return False
+
+        nonce = str(random.randint(100000000000000000, 999999999999999999))
+        payload = {
+            "type": 2,
+            "application_id": str(DISBOARD_ID),
+            "guild_id": str(guild.id),
+            "channel_id": str(channel.id),
+            "session_id": client.ws.session_id,
+            "nonce": nonce,
+            "data": {
+                "version": bump["version"],
+                "id": bump["id"],
+                "name": "bump",
+                "type": 1,
+                "options": [],
+                "attachments": [],
+            },
+        }
+
+        async with session.post("https://discord.com/api/v9/interactions", json=payload) as resp:
+            if resp.status == 204:
+                logger.info("Bumped at %s", datetime.now(EST).strftime("%Y-%m-%d %H:%M:%S EST"))
+                return True
+            text = await resp.text()
+            logger.error("Bump failed: %s %s", resp.status, text)
+            return False
 
 
 async def bump_loop():
