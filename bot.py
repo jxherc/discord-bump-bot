@@ -38,10 +38,10 @@ async def do_bump():
     }
 
     async with aiohttp.ClientSession(headers=headers) as session:
-        # Find /bump command in this guild
+        # Find /bump command via channel search endpoint (used by Discord client)
         async with session.get(
-            f"https://discord.com/api/v9/guilds/{guild.id}/application-commands/search",
-            params={"type": 1, "query": "bump"},
+            f"https://discord.com/api/v9/channels/{channel.id}/application-commands/search",
+            params={"type": 1, "query": "bump", "include_applications": "true"},
         ) as resp:
             logger.info("Search response status: %s", resp.status)
             data = await resp.json()
