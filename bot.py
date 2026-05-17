@@ -6,7 +6,6 @@ from datetime import datetime, timedelta, timezone
 
 import aiohttp
 import discord
-from discord.http import Route
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,47 +29,23 @@ async def do_bump():
         channel = await client.fetch_channel(CHANNEL_ID)
 
     guild = channel.guild
-    logger.info("Channel: %s | Guild: %s (ID: %s)", channel, guild, getattr(guild, "id", None))
 
-    # Try cached guild application commands first
     try:
         cached = await guild.application_commands()
     except TypeError:
         cached = guild.application_commands()
-    logger.info("Cached guild commands: %s", [c.name for c in cached] if cached else [])
 
     bump = next(
         (c for c in cached if c.name == "bump" and getattr(c, "application_id", None) == DISBOARD_ID),
         None,
-    )
-    if not bump:
-        bump = next((c for c in cached if c.name == "bump"), None)
-
-    # Fall back to HTTP search
-    if not bump:
-        data = await client.http.search_application_commands(channel.id, type=1, query="bump", include_applications=True)
-        logger.info("HTTP search result: %s", data)
-        cmds = data.get("application_commands", [])
-        bump_data = next(
-            (c for c in cmds if c["name"] == "bump" and int(c["application_id"]) == DISBOARD_ID),
-            None,
-        ) or next((c for c in cmds if c["name"] == "bump"), None)
-        if bump_data:
-            bump = bump_data  # use raw dict below
+    ) or next((c for c in cached if c.name == "bump"), None)
 
     if not bump:
-        logger.error("No /bump command found anywhere.")
+        logger.error("No /bump command found.")
         return False
 
-    logger.info("Found bump command: %s", bump)
-
-    # Handle both object (from cache) and dict (from HTTP search)
-    if isinstance(bump, dict):
-        cmd_id = bump["id"]
-        cmd_version = bump["version"]
-    else:
-        cmd_id = str(bump.id)
-        cmd_version = str(bump.version)
+    cmd_id = str(bump.id)
+    cmd_version = str(bump.version)
 
     nonce = str(random.randint(100000000000000000, 999999999999999999))
     payload = {
@@ -113,14 +88,15 @@ async def bump_loop():
         try:
             await do_bump()
         except Exception as exc:
-            logger.error("Bump failed: %s", exc)
+            logger.error("Bump error: %s", exc)
 
-        interval = random.randint(120, 130) * 60
+        interval = random.randint(120 * 60, 130 * 60)
         next_time = datetime.now(EST) + timedelta(seconds=interval)
         logger.info(
-            "Next bump at %s (%d min)",
+            "Next bump at %s (%dm %ds)",
             next_time.strftime("%Y-%m-%d %H:%M:%S EST"),
             interval // 60,
+            interval % 60,
         )
         await asyncio.sleep(interval)
 
