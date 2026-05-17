@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import aiohttp
 import discord
+from discord.http import Route
 
 logging.basicConfig(
     level=logging.INFO,
@@ -31,55 +32,50 @@ async def do_bump():
     guild = channel.guild
     logger.info("Channel: %s | Guild: %s (ID: %s)", channel, guild, getattr(guild, "id", None))
 
+    # Use discord.py-self's HTTP client (has X-Super-Properties and all required headers)
+    data = await client.http.request(
+        Route("GET", "/channels/{channel_id}/application-commands/search", channel_id=channel.id),
+        params={"type": 1, "query": "bump", "include_applications": True},
+    )
+
+    cmds = data.get("application_commands", [])
+    logger.info("Commands found: %s", [c["name"] for c in cmds])
+
+    bump = next(
+        (c for c in cmds if c["name"] == "bump" and int(c["application_id"]) == DISBOARD_ID),
+        None,
+    )
+    if not bump:
+        bump = next((c for c in cmds if c["name"] == "bump"), None)
+
+    if not bump:
+        logger.error("No /bump command found in channel. All commands: %s", cmds)
+        return False
+
+    nonce = str(random.randint(100000000000000000, 999999999999999999))
+    payload = {
+        "type": 2,
+        "application_id": str(DISBOARD_ID),
+        "guild_id": str(guild.id),
+        "channel_id": str(channel.id),
+        "session_id": client.ws.session_id,
+        "nonce": nonce,
+        "data": {
+            "version": bump["version"],
+            "id": bump["id"],
+            "name": "bump",
+            "type": 1,
+            "options": [],
+            "attachments": [],
+        },
+    }
+
     headers = {
         "Authorization": TOKEN,
         "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     }
-
     async with aiohttp.ClientSession(headers=headers) as session:
-        # Find /bump command via channel search endpoint (used by Discord client)
-        async with session.get(
-            f"https://discord.com/api/v9/channels/{channel.id}/application-commands/search",
-            params={"type": 1, "query": "", "include_applications": "true", "limit": 25},
-        ) as resp:
-            logger.info("Search response status: %s", resp.status)
-            data = await resp.json()
-            logger.info("Search response: %s", data)
-
-        cmds = data.get("application_commands", [])
-        logger.info("Commands found: %s", [c["name"] for c in cmds])
-
-        bump = next(
-            (c for c in cmds if c["name"] == "bump" and int(c["application_id"]) == DISBOARD_ID),
-            None,
-        )
-        # Fallback: any bump command
-        if not bump:
-            bump = next((c for c in cmds if c["name"] == "bump"), None)
-
-        if not bump:
-            logger.error("No /bump command found. Commands: %s", cmds)
-            return False
-
-        nonce = str(random.randint(100000000000000000, 999999999999999999))
-        payload = {
-            "type": 2,
-            "application_id": str(DISBOARD_ID),
-            "guild_id": str(guild.id),
-            "channel_id": str(channel.id),
-            "session_id": client.ws.session_id,
-            "nonce": nonce,
-            "data": {
-                "version": bump["version"],
-                "id": bump["id"],
-                "name": "bump",
-                "type": 1,
-                "options": [],
-                "attachments": [],
-            },
-        }
-
         async with session.post("https://discord.com/api/v9/interactions", json=payload) as resp:
             if resp.status == 204:
                 logger.info("Bumped at %s", datetime.now(EST).strftime("%Y-%m-%d %H:%M:%S EST"))
