@@ -90,7 +90,7 @@ async def bump_loop():
         except Exception as exc:
             logger.error("Bump error: %s", exc)
 
-        interval = random.randint(120 * 60, 130 * 60)
+        interval = random.randint(121 * 60, 130 * 60)
         next_time = datetime.now(EST) + timedelta(seconds=interval)
         logger.info(
             "Next bump at %s (%dm %ds)",
