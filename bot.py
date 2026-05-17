@@ -37,17 +37,26 @@ async def do_bump():
     }
 
     async with aiohttp.ClientSession(headers=headers) as session:
-        # Find Disboard's /bump command in this guild
+        # Find /bump command in this guild
         async with session.get(
             f"https://discord.com/api/v9/guilds/{guild.id}/application-commands/search",
-            params={"type": 1, "query": "bump", "application_id": str(DISBOARD_ID)},
+            params={"type": 1, "query": "bump"},
         ) as resp:
             data = await resp.json()
 
-        bump = next((c for c in data.get("application_commands", []) if c["name"] == "bump"), None)
+        cmds = data.get("application_commands", [])
+        logger.info("Commands found: %s", [c["name"] for c in cmds])
+
+        bump = next(
+            (c for c in cmds if c["name"] == "bump" and int(c["application_id"]) == DISBOARD_ID),
+            None,
+        )
+        # Fallback: any bump command
+        if not bump:
+            bump = next((c for c in cmds if c["name"] == "bump"), None)
 
         if not bump:
-            logger.error("Could not find /bump command — is Disboard in this server?")
+            logger.error("No /bump command found. Commands: %s", cmds)
             return False
 
         nonce = str(random.randint(100000000000000000, 999999999999999999))
