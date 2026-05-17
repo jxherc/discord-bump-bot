@@ -41,7 +41,7 @@ async def do_bump():
         # Find /bump command via channel search endpoint (used by Discord client)
         async with session.get(
             f"https://discord.com/api/v9/channels/{channel.id}/application-commands/search",
-            params={"type": 1, "query": "bump", "include_applications": "true"},
+            params={"type": 1, "query": "", "include_applications": "true", "limit": 25},
         ) as resp:
             logger.info("Search response status: %s", resp.status)
             data = await resp.json()
