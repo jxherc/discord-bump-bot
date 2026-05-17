@@ -32,31 +32,42 @@ async def do_bump():
     guild = channel.guild
     logger.info("Channel: %s | Guild: %s (ID: %s)", channel, guild, getattr(guild, "id", None))
 
-    # Log available command-related attributes on Guild and HTTPClient
-    cmd_attrs = [a for a in dir(guild) if "command" in a.lower() or "application" in a.lower()]
-    http_attrs = [a for a in dir(client.http) if "command" in a.lower() or "application" in a.lower()]
-    logger.info("Guild command attrs: %s", cmd_attrs)
-    logger.info("HTTP command attrs: %s", http_attrs)
-
-    # Use discord.py-self's HTTP client (has X-Super-Properties and all required headers)
-    data = await client.http.request(
-        Route("GET", "/channels/{channel_id}/application-commands/search", channel_id=channel.id),
-        params={"type": 1, "query": "bump", "include_applications": True},
-    )
-
-    cmds = data.get("application_commands", [])
-    logger.info("Commands found: %s", [c["name"] for c in cmds])
+    # Try cached guild application commands first
+    cached = guild.application_commands
+    logger.info("Cached guild commands: %s", [c.name for c in cached] if cached else [])
 
     bump = next(
-        (c for c in cmds if c["name"] == "bump" and int(c["application_id"]) == DISBOARD_ID),
+        (c for c in cached if c.name == "bump" and getattr(c, "application_id", None) == DISBOARD_ID),
         None,
     )
     if not bump:
-        bump = next((c for c in cmds if c["name"] == "bump"), None)
+        bump = next((c for c in cached if c.name == "bump"), None)
+
+    # Fall back to HTTP search
+    if not bump:
+        data = await client.http.search_application_commands(channel.id, type=1, query="bump", include_applications=True)
+        logger.info("HTTP search result: %s", data)
+        cmds = data.get("application_commands", [])
+        bump_data = next(
+            (c for c in cmds if c["name"] == "bump" and int(c["application_id"]) == DISBOARD_ID),
+            None,
+        ) or next((c for c in cmds if c["name"] == "bump"), None)
+        if bump_data:
+            bump = bump_data  # use raw dict below
 
     if not bump:
-        logger.error("No /bump command found in channel. All commands: %s", cmds)
+        logger.error("No /bump command found anywhere.")
         return False
+
+    logger.info("Found bump command: %s", bump)
+
+    # Handle both object (from cache) and dict (from HTTP search)
+    if isinstance(bump, dict):
+        cmd_id = bump["id"]
+        cmd_version = bump["version"]
+    else:
+        cmd_id = str(bump.id)
+        cmd_version = str(bump.version)
 
     nonce = str(random.randint(100000000000000000, 999999999999999999))
     payload = {
@@ -67,8 +78,8 @@ async def do_bump():
         "session_id": client.ws.session_id,
         "nonce": nonce,
         "data": {
-            "version": bump["version"],
-            "id": bump["id"],
+            "version": cmd_version,
+            "id": cmd_id,
             "name": "bump",
             "type": 1,
             "options": [],
