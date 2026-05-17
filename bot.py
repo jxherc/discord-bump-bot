@@ -29,6 +29,7 @@ async def do_bump():
         channel = await client.fetch_channel(CHANNEL_ID)
 
     guild = channel.guild
+    logger.info("Channel: %s | Guild: %s (ID: %s)", channel, guild, getattr(guild, "id", None))
 
     headers = {
         "Authorization": TOKEN,
@@ -42,7 +43,9 @@ async def do_bump():
             f"https://discord.com/api/v9/guilds/{guild.id}/application-commands/search",
             params={"type": 1, "query": "bump"},
         ) as resp:
+            logger.info("Search response status: %s", resp.status)
             data = await resp.json()
+            logger.info("Search response: %s", data)
 
         cmds = data.get("application_commands", [])
         logger.info("Commands found: %s", [c["name"] for c in cmds])
