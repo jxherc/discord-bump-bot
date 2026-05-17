@@ -33,7 +33,10 @@ async def do_bump():
     logger.info("Channel: %s | Guild: %s (ID: %s)", channel, guild, getattr(guild, "id", None))
 
     # Try cached guild application commands first
-    cached = guild.application_commands
+    try:
+        cached = await guild.application_commands()
+    except TypeError:
+        cached = guild.application_commands()
     logger.info("Cached guild commands: %s", [c.name for c in cached] if cached else [])
 
     bump = next(
